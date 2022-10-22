@@ -34,7 +34,7 @@ extern "C"
 // If core is not defined, then we are running in Arduino or PIO
 #ifndef CONFIG_ASYNC_TCP_RUNNING_CORE
 #define CONFIG_ASYNC_TCP_RUNNING_CORE -1 // any available core
-#define CONFIG_ASYNC_TCP_USE_WDT 1       // if enabled, adds between 33us and 200us per event
+// #define CONFIG_ASYNC_TCP_USE_WDT 1       // if enabled, adds between 33us and 200us per event
 #endif
 
 class AsyncClient;
@@ -99,6 +99,8 @@ public:
   uint32_t getAckTimeout();
   void setAckTimeout(uint32_t timeout); // no ACK timeout for the last sent packet in milliseconds
 
+  void setConnectTimeout(uint32_t timeout);
+
   void setNoDelay(bool nodelay);
   bool getNoDelay();
 
@@ -112,6 +114,7 @@ public:
   uint16_t remotePort();
   IPAddress localIP();
   uint16_t localPort();
+  IPAddress ipAdress;
 
   void onConnect(AcConnectHandler cb, void *arg = 0);    // on successful connect
   void onDisconnect(AcConnectHandler cb, void *arg = 0); // disconnected
@@ -165,11 +168,15 @@ protected:
 
   bool _pcb_busy;
   uint32_t _pcb_sent_at;
+  uint32_t _last_activity_at;
+
   bool _ack_pcb;
   uint32_t _rx_ack_len;
   uint32_t _rx_last_packet;
   uint32_t _rx_since_timeout;
   uint32_t _ack_timeout;
+  uint32_t _connect_timeout;
+
   uint16_t _connect_port;
 
   int8_t _close();

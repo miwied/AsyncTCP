@@ -30,7 +30,9 @@ extern "C"
 #include "lwip/dns.h"
 #include "lwip/err.h"
 }
-#include "esp_task_wdt.h"
+
+// deactivated watchdog timer
+// #include "esp_task_wdt.h"
 
 /*
  * TCP/IP Event Task
@@ -250,24 +252,13 @@ static void _async_service_task(void *pvParameters)
     {
         if (_get_async_event(&packet))
         {
-#if CONFIG_ASYNC_TCP_USE_WDT
-            if (esp_task_wdt_add(NULL) != ESP_OK)
-            {
-                log_e("Failed to add async task to WDT");
-            }
-#endif
             _handle_async_event(packet);
-#if CONFIG_ASYNC_TCP_USE_WDT
-            if (esp_task_wdt_delete(NULL) != ESP_OK)
-            {
-                log_e("Failed to remove loop task from WDT");
-            }
-#endif
         }
     }
     vTaskDelete(NULL);
     _async_service_task_handle = NULL;
 }
+
 /*
 static void _stop_async_task(){
     if(_async_service_task_handle){
@@ -276,6 +267,7 @@ static void _stop_async_task(){
     }
 }
 */
+
 static bool _start_async_task()
 {
     if (!_init_async_event_queue())
@@ -810,6 +802,9 @@ bool AsyncClient::connect(IPAddress ip, uint16_t port)
     addr.type = IPADDR_TYPE_V4;
     addr.u_addr.ip4.addr = ip;
 
+    ipAdress = ip;
+    _last_activity_at = millis();
+
     tcp_pcb *pcb = tcp_new_ip_type(IPADDR_TYPE_V4);
     if (!pcb)
     {
@@ -904,6 +899,7 @@ bool AsyncClient::send()
 {
     int8_t err = ERR_OK;
     err = _tcp_output(_pcb, _closed_slot);
+
     if (err == ERR_OK)
     {
         _pcb_busy = true;
@@ -1002,6 +998,7 @@ void AsyncClient::_free_closed_slot()
 int8_t AsyncClient::_connected(void *pcb, int8_t err)
 {
     _pcb = reinterpret_cast<tcp_pcb *>(pcb);
+
     if (_pcb)
     {
         _rx_last_packet = millis();
@@ -1125,6 +1122,17 @@ int8_t AsyncClient::_recv(tcp_pcb *pcb, pbuf *pb, int8_t err)
 
 int8_t AsyncClient::_poll(tcp_pcb *pcb)
 {
+    uint32_t now = millis();
+
+    if (_connect_timeout && (now - _last_activity_at > _connect_timeout))
+    {
+        if (_timeout_cb)
+        {
+            _timeout_cb(_timeout_cb_arg, this, (now - _last_activity_at));
+        }
+        return ERR_OK;
+    }
+
     if (!_pcb)
     {
         log_w("pcb is NULL");
@@ -1136,15 +1144,15 @@ int8_t AsyncClient::_poll(tcp_pcb *pcb)
         return ERR_OK;
     }
 
-    uint32_t now = millis();
-
     // ACK Timeout
     if (_pcb_busy && _ack_timeout && (now - _pcb_sent_at) >= _ack_timeout)
     {
         _pcb_busy = false;
         log_w("ack timeout %d", pcb->state);
         if (_timeout_cb)
+        {
             _timeout_cb(_timeout_cb_arg, this, (now - _pcb_sent_at));
+        }
         return ERR_OK;
     }
     // RX Timeout
@@ -1240,6 +1248,11 @@ uint32_t AsyncClient::getAckTimeout()
 void AsyncClient::setAckTimeout(uint32_t timeout)
 {
     _ack_timeout = timeout;
+}
+
+void AsyncClient::setConnectTimeout(uint32_t timeout)
+{
+    _connect_timeout = timeout;
 }
 
 void AsyncClient::setNoDelay(bool nodelay)
@@ -1501,7 +1514,7 @@ int8_t AsyncClient::_s_sent(void *arg, struct tcp_pcb *pcb, uint16_t len)
 
 void AsyncClient::_s_error(void *arg, int8_t err)
 {
-    reinterpret_cast<AsyncClient *>(arg)->_error(err);
+    return reinterpret_cast<AsyncClient *>(arg)->_error(err);
 }
 
 int8_t AsyncClient::_s_connected(void *arg, void *pcb, int8_t err)
