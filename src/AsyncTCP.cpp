@@ -1126,10 +1126,12 @@ int8_t AsyncClient::_poll(tcp_pcb *pcb)
 
     if (_connect_timeout && (now - _last_activity_at > _connect_timeout))
     {
-        if (_timeout_cb)
+        if (_timeout_cb && !_connect_timeout_flag)
         {
             _timeout_cb(_timeout_cb_arg, this, (now - _last_activity_at));
         }
+
+        _connect_timeout_flag = true;
         return ERR_OK;
     }
 

@@ -176,7 +176,7 @@ protected:
   uint32_t _rx_since_timeout;
   uint32_t _ack_timeout;
   uint32_t _connect_timeout;
-
+  bool _connect_timeout_flag = false; // false = connect timeout not occured, true = connect timeout occured
   uint16_t _connect_port;
 
   int8_t _close();
